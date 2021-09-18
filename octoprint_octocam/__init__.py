@@ -6,6 +6,7 @@ from octoprint.events import Events
 import flask
 import requests
 import logging
+import threading
 
 class OctoCamPlugin(
 		octoprint.plugin.AssetPlugin,
@@ -57,12 +58,9 @@ class OctoCamPlugin(
 			toggle=[],
 		)
 
-
 	def on_after_startup(self):
 		self._logger.info("OctoCam started, listening for request")
-		response = self.check_status()
-		self._plugin_manager.send_plugin_message(self._identifier, response)
-		self._logger.info("OctoCam light has status: %s" % response)
+		threading.Thread(target=self.save_check_status).start()
 
 	def on_api_command(self, command, data):
 		if command == 'turnOn':
@@ -97,6 +95,12 @@ class OctoCamPlugin(
 		self._plugin_manager.send_plugin_message(self._identifier, response)
 		return response
 
+	def save_check_status(self):
+		try:
+			self.check_status()
+		except Exception as e:
+			self._logger.info("Unable to update status: %e" % e)
+
 	def check_status(self):
 		url = self.get_octocam_url()
 		r = requests.get(url, timeout=float(5))
@@ -110,7 +114,7 @@ class OctoCamPlugin(
 
 	def on_event(self, event, payload):
 		if event == Events.CLIENT_OPENED:
-			self.check_status()
+			threading.Thread(target=self.save_check_status).start()
 			return
 
 	def get_update_information(self):
